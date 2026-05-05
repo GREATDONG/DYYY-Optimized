@@ -1,18 +1,19 @@
-//
-//  AWMSafeDispatchTimer.h
-//  DYYY-Optimized
-//
-
 #import <Foundation/Foundation.h>
+
+NS_ASSUME_NONNULL_BEGIN
 
 @interface AWMSafeDispatchTimer : NSObject
 
-+ (instancetype)scheduledTimerWithTimeInterval:(NSTimeInterval)interval
-                                        target:(id)target
-                                      selector:(SEL)selector
-                                      userInfo:(id)userInfo
-                                       repeats:(BOOL)repeats;
+- (void)startWithInterval:(NSTimeInterval)interval
+                   leeway:(NSTimeInterval)leeway
+                    queue:(dispatch_queue_t)queue
+                 repeats:(BOOL)repeats
+                 handler:(dispatch_block_t)handler;
 
-- (void)invalidate;
+- (void)cancel;
+
+@property (nonatomic, readonly, getter=isRunning) BOOL running;
 
 @end
+
+NS_ASSUME_NONNULL_END

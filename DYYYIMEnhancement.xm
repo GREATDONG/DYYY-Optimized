@@ -1,9 +1,13 @@
-//
+﻿//
 //  DYYYIMEnhancement.xm
-//  DYYY-Optimized
+//  DYYY IM 聊天增强功能
 //
-//  IM 聊天增强功能 - 修复版
-//  修复问题：开关无效、%group 未正确启用
+//  功能列表：
+//  1. 左滑引用 / 右滑撤回消息
+//  2. 阻止已读回执上传
+//  3. 阻止访客记录上传
+//
+//  Created by DYYY Team on 2026/05/01
 //
 
 #import <UIKit/UIKit.h>
@@ -13,38 +17,19 @@
 #import "DYYYManager.h"
 #import "DYYYToast.h"
 #import "DYYYUtils.h"
-#import "DYYYCompat.h"
 
-#pragma mark - 配置读取工具
-
-/**
- * 安全读取布尔配置
- * 修复：确保配置键正确读取
- */
-static BOOL DYYYGetBoolConfig(NSString *key, BOOL defaultValue) {
-    if (!key || key.length == 0) {
-        return defaultValue;
-    }
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    id value = [defaults objectForKey:key];
-    if (value == nil) {
-        return defaultValue;
-    }
-    return [value boolValue];
-}
-
-#pragma mark - 功能1: 滑动手势（引用/撤回）
-
-// Associated Object Keys
+// Associated Object Keys（必须用静态变量地址）
 static char kDYYYSwipeGestureKey;
 
-/**
- * 从 Cell 获取消息对象 - 多策略降级
- */
+// ============================================================
+// 功能1: 聊天消息左滑引用 / 右滑撤回
+// ============================================================
+
+// 辅助函数：从 Cell 获取消息对象
 static id DYYYGetMessageFromCell(id cell) {
     if (!cell) return nil;
     
-    // 策略1: 通过 context 获取
+    // 尝试通过 context 获取
     SEL contextSel = NSSelectorFromString(@"context");
     if ([cell respondsToSelector:contextSel]) {
         id context = ((id (*)(id, SEL))objc_msgSend)(cell, contextSel);
@@ -53,24 +38,25 @@ static id DYYYGetMessageFromCell(id cell) {
             if ([context respondsToSelector:messageSel]) {
                 return ((id (*)(id, SEL))objc_msgSend)(context, messageSel);
             }
-            // 尝试 componentContext
+            // componentContext
+            id compCtx = nil;
             SEL compCtxSel = NSSelectorFromString(@"componentContext");
             if ([context respondsToSelector:compCtxSel]) {
-                id compCtx = ((id (*)(id, SEL))objc_msgSend)(context, compCtxSel);
-                if (compCtx && [compCtx respondsToSelector:messageSel]) {
-                    return ((id (*)(id, SEL))objc_msgSend)(compCtx, messageSel);
-                }
+                compCtx = ((id (*)(id, SEL))objc_msgSend)(context, compCtxSel);
+            }
+            if (compCtx && [compCtx respondsToSelector:messageSel]) {
+                return ((id (*)(id, SEL))objc_msgSend)(compCtx, messageSel);
             }
         }
     }
     
-    // 策略2: 直接获取 message
+    // 尝试直接获取 message
     SEL msgSel = NSSelectorFromString(@"message");
     if ([cell respondsToSelector:msgSel]) {
         return ((id (*)(id, SEL))objc_msgSend)(cell, msgSel);
     }
     
-    // 策略3: 通过 model 获取
+    // 尝试 model
     SEL modelSel = NSSelectorFromString(@"model");
     if ([cell respondsToSelector:modelSel]) {
         id model = ((id (*)(id, SEL))objc_msgSend)(cell, modelSel);
@@ -82,9 +68,65 @@ static id DYYYGetMessageFromCell(id cell) {
     return nil;
 }
 
-/**
- * 获取消息ID
- */
+// 辅助：获取消息发送者ID
+static NSString *DYYYGetMessageSenderID(id message) {
+    if (!message) return nil;
+    
+    SEL fromUserSel = NSSelectorFromString(@"fromUserId");
+    if ([message respondsToSelector:fromUserSel]) {
+        return ((NSString *(*)(id, SEL))objc_msgSend)(message, fromUserSel);
+    }
+    
+    SEL senderSel = NSSelectorFromString(@"senderId");
+    if ([message respondsToSelector:senderSel]) {
+        return ((NSString *(*)(id, SEL))objc_msgSend)(message, senderSel);
+    }
+    
+    // user.userId
+    SEL userSel = NSSelectorFromString(@"user");
+    if ([message respondsToSelector:userSel]) {
+        id user = ((id (*)(id, SEL))objc_msgSend)(message, userSel);
+        if (user) {
+            SEL userIdSel = NSSelectorFromString(@"userId");
+            if ([user respondsToSelector:userIdSel]) {
+                return ((NSString *(*)(id, SEL))objc_msgSend)(user, userIdSel);
+            }
+        }
+    }
+    
+    return nil;
+}
+
+// 辅助：获取当前登录用户ID
+static NSString *DYYYGetCurrentUserID() {
+    Class accountServiceClass = objc_getClass("AWEAccountService");
+    if (!accountServiceClass) {
+        accountServiceClass = objc_getClass("AWELoginService");
+    }
+    
+    if (accountServiceClass) {
+        SEL sharedSel = NSSelectorFromString(@"sharedInstance");
+        if (!sharedSel) sharedSel = NSSelectorFromString(@"shared");
+        
+        if (class_getClassMethod(accountServiceClass, sharedSel)) {
+            id service = ((id (*)(id, SEL))objc_msgSend)(accountServiceClass, sharedSel);
+            if (service) {
+                SEL userIdSel = NSSelectorFromString(@"userId");
+                if ([service respondsToSelector:userIdSel]) {
+                    return ((NSString *(*)(id, SEL))objc_msgSend)(service, userIdSel);
+                }
+                SEL currentUserIdSel = NSSelectorFromString(@"currentUserId");
+                if ([service respondsToSelector:currentUserIdSel]) {
+                    return ((NSString *(*)(id, SEL))objc_msgSend)(service, currentUserIdSel);
+                }
+            }
+        }
+    }
+    
+    return nil;
+}
+
+// 辅助：获取消息ID
 static NSString *DYYYGetMessageID(id message) {
     if (!message) return nil;
     
@@ -101,9 +143,7 @@ static NSString *DYYYGetMessageID(id message) {
     return nil;
 }
 
-/**
- * 引用消息
- */
+// 辅助：引用消息
 static void DYYYQuoteMessage(id cell, id message) {
     NSString *msgId = DYYYGetMessageID(message);
     if (!msgId) {
@@ -111,292 +151,307 @@ static void DYYYQuoteMessage(id cell, id message) {
         return;
     }
     
-    // 尝试多种引用方式
-    BOOL success = NO;
-    
-    // 方式1: 通过 cell 的 quoteAction
-    SEL quoteActionSel = NSSelectorFromString(@"quoteAction");
-    if ([cell respondsToSelector:quoteActionSel]) {
-        ((void (*)(id, SEL))objc_msgSend)(cell, quoteActionSel);
-        success = YES;
+    // 尝试调用 Cell 的引用方法
+    SEL quoteSel = NSSelectorFromString(@"quoteMessage");
+    if ([cell respondsToSelector:quoteSel]) {
+        ((void (*)(id, SEL))objc_msgSend)(cell, quoteSel);
+        return;
     }
     
-    // 方式2: 通过 delegate
-    if (!success) {
-        SEL delegateSel = NSSelectorFromString(@"delegate");
-        if ([cell respondsToSelector:delegateSel]) {
-            id delegate = ((id (*)(id, SEL))objc_msgSend)(cell, delegateSel);
-            SEL quoteSel = NSSelectorFromString(@"didTapQuoteButton:");
-            if ([delegate respondsToSelector:quoteSel]) {
-                ((void (*)(id, SEL, id))objc_msgSend)(delegate, quoteSel, message);
-                success = YES;
+    // 尝试调用 context 的引用方法
+    SEL contextSel = NSSelectorFromString(@"context");
+    if ([cell respondsToSelector:contextSel]) {
+        id context = ((id (*)(id, SEL))objc_msgSend)(cell, contextSel);
+        if (context && [context respondsToSelector:quoteSel]) {
+            ((void (*)(id, SEL))objc_msgSend)(context, quoteSel);
+            return;
+        }
+    }
+    
+    // 尝试调用会话的引用方法
+    SEL convSel = NSSelectorFromString(@"conversation");
+    if ([cell respondsToSelector:convSel]) {
+        id conv = ((id (*)(id, SEL))objc_msgSend)(cell, convSel);
+        if (conv) {
+            SEL replySel = NSSelectorFromString(@"replyToMessage:");
+            if ([conv respondsToSelector:replySel]) {
+                ((void (*)(id, SEL, id))objc_msgSend)(conv, replySel, message);
+                return;
             }
         }
     }
     
-    // 方式3: 发送通知
-    if (!success) {
-        [[NSNotificationCenter defaultCenter] postNotificationName:@"DYYYQuoteMessage" object:message];
-        success = YES;
-    }
-    
-    if (success) {
-        [DYYYToast showSuccessToastWithMessage:@"已引用消息"];
-    } else {
-        [DYYYToast showSuccessToastWithMessage:@"引用功能暂不可用"];
-    }
+    [DYYYToast showSuccessToastWithMessage:@"引用功能不可用"];
 }
 
-/**
- * 撤回消息
- */
+// 辅助：撤回消息
 static void DYYYRecallMessage(id cell, id message) {
+    NSString *senderId = DYYYGetMessageSenderID(message);
+    NSString *currentUserId = DYYYGetCurrentUserID();
+    
+    // 只能撤回自己发送的消息
+    if (senderId && currentUserId && ![senderId isEqualToString:currentUserId]) {
+        [DYYYToast showSuccessToastWithMessage:@"只能撤回自己的消息"];
+        return;
+    }
+    
     NSString *msgId = DYYYGetMessageID(message);
     if (!msgId) {
         [DYYYToast showSuccessToastWithMessage:@"无法获取消息ID"];
         return;
     }
     
-    // 获取撤回服务
-    Class recallServiceClass = objc_getClass("AWEIMRecallService");
-    if (!recallServiceClass) {
-        recallServiceClass = objc_getClass("AWEIMMessageService");
+    // 尝试调用 Cell 的撤回方法
+    SEL recallSel = NSSelectorFromString(@"recallMessage");
+    if ([cell respondsToSelector:recallSel]) {
+        ((void (*)(id, SEL))objc_msgSend)(cell, recallSel);
+        return;
     }
     
-    if (recallServiceClass) {
-        SEL sharedSel = NSSelectorFromString(@"sharedInstance");
-        if (class_getClassMethod(recallServiceClass, sharedSel)) {
-            id recallSvc = ((id (*)(id, SEL))objc_msgSend)(recallServiceClass, sharedSel);
-            SEL recallSel = NSSelectorFromString(@"recallMessage:completion:");
-            if ([recallSvc respondsToSelector:recallSel]) {
-                // 使用 block 回调
-                void (^completion)(id) = ^(id result) {
-                    [DYYYToast showSuccessToastWithMessage:@"已撤回消息"];
-                };
-                ((void (*)(id, SEL, id, id))objc_msgSend)(recallSvc, recallSel, message, completion);
+    // 尝试调用会话的撤回方法
+    SEL convSel = NSSelectorFromString(@"conversation");
+    if ([cell respondsToSelector:convSel]) {
+        id conv = ((id (*)(id, SEL))objc_msgSend)(cell, convSel);
+        if (conv) {
+            SEL revokeSel = NSSelectorFromString(@"revokeMessage:");
+            if ([conv respondsToSelector:revokeSel]) {
+                ((void (*)(id, SEL, id))objc_msgSend)(conv, revokeSel, message);
                 return;
             }
         }
     }
     
-    [DYYYToast showSuccessToastWithMessage:@"撤回功能暂不可用"];
+    [DYYYToast showSuccessToastWithMessage:@"撤回功能不可用"];
 }
 
-// 滑动手势回调
-static void DYYYHandleSwipeGesture(UISwipeGestureRecognizer *gesture) {
-    if (!DYYYGetBoolConfig(@"DYYYEnableSwipeActions", YES)) {
-        return; // 功能开关关闭
+// Hook 聊天 Cell 添加滑动手势
+%group DYYYIMSwipeActionsGroup
+
+%hook AWEIMReusableCommonCell
+
+- (void)didMoveToSuperview {
+    %orig;
+    
+    if (!DYYYGetBool(@"DYYYEnableSwipeActions")) return;
+    
+    // 避免重复添加手势
+    for (UIGestureRecognizer *gesture in self.gestureRecognizers) {
+        if ([gesture isKindOfClass:[UISwipeGestureRecognizer class]] &&
+            [(NSString *)objc_getAssociatedObject(gesture, &kDYYYSwipeGestureKey) hasPrefix:@"DYYY"]) {
+            return;
+        }
     }
     
-    if (gesture.state != UIGestureRecognizerStateEnded) return;
+    NSString *leftAction = DYYYGetString(@"DYYYSwipeLeftAction");
+    NSString *rightAction = DYYYGetString(@"DYYYSwipeRightAction");
     
-    UIView *cell = gesture.view;
-    if (!cell) return;
+    // 左滑手势 → 引用
+    if ([leftAction isEqualToString:@"quote"]) {
+        UISwipeGestureRecognizer *leftSwipe = [[UISwipeGestureRecognizer alloc]
+                                               initWithTarget:self
+                                               action:@selector(dyyy_handleSwipeGesture:)];
+        leftSwipe.direction = UISwipeGestureRecognizerDirectionLeft;
+        objc_setAssociatedObject(leftSwipe, &kDYYYSwipeGestureKey, @"DYYYLeftSwipe", OBJC_ASSOCIATION_RETAIN);
+        [self addGestureRecognizer:leftSwipe];
+    }
     
-    id message = DYYYGetMessageFromCell(cell);
+    // 右滑手势 → 撤回
+    if ([rightAction isEqualToString:@"recall"]) {
+        UISwipeGestureRecognizer *rightSwipe = [[UISwipeGestureRecognizer alloc]
+                                                initWithTarget:self
+                                                action:@selector(dyyy_handleSwipeGesture:)];
+        rightSwipe.direction = UISwipeGestureRecognizerDirectionRight;
+        objc_setAssociatedObject(rightSwipe, &kDYYYSwipeGestureKey, @"DYYYRightSwipe", OBJC_ASSOCIATION_RETAIN);
+        [self addGestureRecognizer:rightSwipe];
+    }
+}
+
+%new
+- (void)dyyy_handleSwipeGesture:(UISwipeGestureRecognizer *)gesture {
+    if (!DYYYGetBool(@"DYYYEnableSwipeActions")) return;
+    
+    id message = DYYYGetMessageFromCell(self);
     if (!message) {
         [DYYYToast showSuccessToastWithMessage:@"无法获取消息"];
         return;
     }
     
-    if (gesture.direction == UISwipeGestureRecognizerDirectionLeft) {
-        DYYYQuoteMessage(cell, message);
-    } else if (gesture.direction == UISwipeGestureRecognizerDirectionRight) {
-        DYYYRecallMessage(cell, message);
-    }
-}
-
-#pragma mark - 功能2: 阻止已读回执
-
-// 保存原始 IMP
-static IMP origReportReadReceipt = NULL;
-static IMP origAckRead = NULL;
-static IMP origSendReadReceipt = NULL;
-static IMP origMarkConversationRead = NULL;
-
-/**
- * 替换后的 reportReadReceipt 实现
- */
-static void DYYYReplacedReportReadReceipt(id self, SEL _cmd, id arg1) {
-    if (!DYYYGetBoolConfig(@"DYYYBlockReadReceipt", NO)) {
-        // 开关关闭，调用原始实现
-        if (origReportReadReceipt) {
-            ((void (*)(id, SEL, id))origReportReadReceipt)(self, _cmd, arg1);
-        }
-    }
-    // 开关打开，不执行任何操作（阻止上报）
-}
-
-/**
- * 替换后的 ackRead 实现
- */
-static void DYYYReplacedAckRead(id self, SEL _cmd, id arg1) {
-    if (!DYYYGetBoolConfig(@"DYYYBlockReadReceipt", NO)) {
-        if (origAckRead) {
-            ((void (*)(id, SEL, id))origAckRead)(self, _cmd, arg1);
-        }
-    }
-}
-
-/**
- * 替换后的 sendReadReceipt 实现
- */
-static void DYYYReplacedSendReadReceipt(id self, SEL _cmd, id arg1) {
-    if (!DYYYGetBoolConfig(@"DYYYBlockReadReceipt", NO)) {
-        if (origSendReadReceipt) {
-            ((void (*)(id, SEL, id))origSendReadReceipt)(self, _cmd, arg1);
-        }
-    }
-}
-
-/**
- * 替换后的 markConversationRead 实现
- */
-static void DYYYReplacedMarkConversationRead(id self, SEL _cmd) {
-    if (!DYYYGetBoolConfig(@"DYYYBlockReadReceipt", NO)) {
-        if (origMarkConversationRead) {
-            ((void (*)(id, SEL))origMarkConversationRead)(self, _cmd);
-        }
-    }
-}
-
-/**
- * 设置已读回执拦截
- */
-static void DYYYSetupReadReceiptHooks(void) {
-    // Hook AWEIMReadReceiptDataCenter
-    Class readReceiptClass = DYYYGetClass(DYYY_CLS_IMReadReceiptDataCenter);
-    if (readReceiptClass) {
-        SEL reportSel = NSSelectorFromString(@"reportReadReceipt:");
-        SEL ackSel = NSSelectorFromString(@"ackRead:");
-        SEL sendSel = NSSelectorFromString(@"sendReadReceipt:");
-        
-        Method reportMethod = class_getInstanceMethod(readReceiptClass, reportSel);
-        Method ackMethod = class_getInstanceMethod(readReceiptClass, ackSel);
-        Method sendMethod = class_getInstanceMethod(readReceiptClass, sendSel);
-        
-        if (reportMethod) {
-            origReportReadReceipt = method_getImplementation(reportMethod);
-            method_setImplementation(reportMethod, (IMP)DYYYReplacedReportReadReceipt);
-        }
-        if (ackMethod) {
-            origAckRead = method_getImplementation(ackMethod);
-            method_setImplementation(ackMethod, (IMP)DYYYReplacedAckRead);
-        }
-        if (sendMethod) {
-            origSendReadReceipt = method_getImplementation(sendMethod);
-            method_setImplementation(sendMethod, (IMP)DYYYReplacedSendReadReceipt);
-        }
-    }
+    NSString *gestureType = objc_getAssociatedObject(gesture, &kDYYYSwipeGestureKey);
     
-    // Hook AWEIMConversation
-    Class conversationClass = DYYYGetClass(DYYY_CLS_IMConversation);
-    if (conversationClass) {
-        SEL markReadSel = NSSelectorFromString(@"markConversationRead");
-        Method markReadMethod = class_getInstanceMethod(conversationClass, markReadSel);
-        if (markReadMethod) {
-            origMarkConversationRead = method_getImplementation(markReadMethod);
-            method_setImplementation(markReadMethod, (IMP)DYYYReplacedMarkConversationRead);
-        }
+    if ([gestureType isEqualToString:@"DYYYLeftSwipe"]) {
+        // 左滑 → 引用
+        DYYYQuoteMessage(self, message);
+    } else if ([gestureType isEqualToString:@"DYYYRightSwipe"]) {
+        // 右滑 → 撤回
+        DYYYRecallMessage(self, message);
     }
-}
-
-#pragma mark - 功能3: 阻止访客记录上传
-
-/**
- * 替换后的访客上报实现
- */
-static void DYYYReplacedReportVisit(id self, SEL _cmd) {
-    if (!DYYYGetBoolConfig(@"DYYYBlockVisitorUpload", NO)) {
-        // 获取原始 IMP 并调用
-        IMP orig = class_getMethodImplementation([self class], _cmd);
-        if (orig) {
-            ((void (*)(id, SEL))orig)(self, _cmd);
-        }
-    }
-    // 开关打开，不执行任何操作
-}
-
-/**
- * 设置访客记录拦截
- */
-static void DYYYSetupVisitorHooks(void) {
-    Class visitorClass = DYYYGetClass(DYYY_CLS_ProfileNavVisitorItem);
-    if (visitorClass) {
-        SEL reportSel = NSSelectorFromString(@"reportVisit");
-        SEL enterSel = NSSelectorFromString(@"didEnterVisitorsPage");
-        
-        Method reportMethod = class_getInstanceMethod(visitorClass, reportSel);
-        Method enterMethod = class_getInstanceMethod(visitorClass, enterSel);
-        
-        if (reportMethod) {
-            method_setImplementation(reportMethod, (IMP)DYYYReplacedReportVisit);
-        }
-        if (enterMethod) {
-            method_setImplementation(enterMethod, (IMP)DYYYReplacedReportVisit);
-        }
-    }
-}
-
-#pragma mark - Logos Hooks
-
-// 滑动手势功能
-%group DYYYIMSwipeActionsGroup
-
-%hook AWEIMMessageCell
-
-- (void)layoutSubviews {
-    %orig;
-    
-    // 检查功能开关
-    if (!DYYYGetBoolConfig(@"DYYYEnableSwipeActions", YES)) {
-        return;
-    }
-    
-    // 检查是否已添加手势
-    if (objc_getAssociatedObject(self, &kDYYYSwipeGestureKey)) {
-        return;
-    }
-    
-    // 添加左滑手势（引用）
-    UISwipeGestureRecognizer *leftSwipe = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(dyyy_handleSwipe:)];
-    leftSwipe.direction = UISwipeGestureRecognizerDirectionLeft;
-    [self addGestureRecognizer:leftSwipe];
-    
-    // 添加右滑手势（撤回）
-    UISwipeGestureRecognizer *rightSwipe = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(dyyy_handleSwipe:)];
-    rightSwipe.direction = UISwipeGestureRecognizerDirectionRight;
-    [self addGestureRecognizer:rightSwipe];
-    
-    // 标记已添加
-    objc_setAssociatedObject(self, &kDYYYSwipeGestureKey, @(YES), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-}
-
-%new
-- (void)dyyy_handleSwipe:(UISwipeGestureRecognizer *)gesture {
-    DYYYHandleSwipeGesture(gesture);
 }
 
 %end
 
 %end // DYYYIMSwipeActionsGroup
 
-#pragma mark - 初始化
+// ============================================================
+// 功能2: 阻止已读回执上传
+// ============================================================
+
+// 使用运行时动态 swizzle 拦截已读回执
+static IMP DYYYOrigReportReadReceipt = NULL;
+static IMP DYYYOrigAckRead = NULL;
+static IMP DYYYOrigSendReadReceipt = NULL;
+static IMP DYYYOrigMarkConversationRead = NULL;
+
+static void DYYYReplacedReportReadReceipt(id self, SEL _cmd, id arg1) {
+    if (DYYYGetBool(@"DYYYBlockReadReceipt")) {
+        NSLog(@"[DYYY] Blocked read receipt report");
+        return;
+    }
+    if (DYYYOrigReportReadReceipt) {
+        ((void (*)(id, SEL, id))DYYYOrigReportReadReceipt)(self, _cmd, arg1);
+    }
+}
+
+static void DYYYReplacedAckRead(id self, SEL _cmd, id arg1) {
+    if (DYYYGetBool(@"DYYYBlockReadReceipt")) {
+        NSLog(@"[DYYY] Blocked read ack");
+        return;
+    }
+    if (DYYYOrigAckRead) {
+        ((void (*)(id, SEL, id))DYYYOrigAckRead)(self, _cmd, arg1);
+    }
+}
+
+static void DYYYReplacedSendReadReceipt(id self, SEL _cmd, id arg1) {
+    if (DYYYGetBool(@"DYYYBlockReadReceipt")) {
+        NSLog(@"[DYYY] Blocked send read receipt");
+        return;
+    }
+    if (DYYYOrigSendReadReceipt) {
+        ((void (*)(id, SEL, id))DYYYOrigSendReadReceipt)(self, _cmd, arg1);
+    }
+}
+
+static void DYYYReplacedMarkConversationRead(id self, SEL _cmd) {
+    if (DYYYGetBool(@"DYYYBlockReadReceipt")) {
+        NSLog(@"[DYYY] Blocked conversation read mark");
+        return;
+    }
+    if (DYYYOrigMarkConversationRead) {
+        ((void (*)(id, SEL))DYYYOrigMarkConversationRead)(self, _cmd);
+    }
+}
+
+static void DYYYSetupReadReceiptHooks() {
+    // Hook AWEIMReadReceiptDataCenter 方法
+    Class readReceiptClass = objc_getClass("AWEIMReadReceiptDataCenter");
+    if (readReceiptClass) {
+        // reportReadReceipt:
+        SEL reportSel = NSSelectorFromString(@"reportReadReceipt:");
+        if (class_getInstanceMethod(readReceiptClass, reportSel)) {
+            Method origMethod = class_getInstanceMethod(readReceiptClass, reportSel);
+            DYYYOrigReportReadReceipt = method_setImplementation(origMethod, (IMP)DYYYReplacedReportReadReceipt);
+        }
+        // ackRead:
+        SEL ackSel = NSSelectorFromString(@"ackRead:");
+        if (class_getInstanceMethod(readReceiptClass, ackSel)) {
+            Method origMethod = class_getInstanceMethod(readReceiptClass, ackSel);
+            DYYYOrigAckRead = method_setImplementation(origMethod, (IMP)DYYYReplacedAckRead);
+        }
+        // sendReadReceipt:
+        SEL sendSel = NSSelectorFromString(@"sendReadReceipt:");
+        if (class_getInstanceMethod(readReceiptClass, sendSel)) {
+            Method origMethod = class_getInstanceMethod(readReceiptClass, sendSel);
+            DYYYOrigSendReadReceipt = method_setImplementation(origMethod, (IMP)DYYYReplacedSendReadReceipt);
+        }
+    }
+    
+    // Hook AWEIMConversation markConversationRead
+    Class convClass = objc_getClass("AWEIMConversation");
+    if (convClass) {
+        SEL markSel = NSSelectorFromString(@"markConversationRead");
+        if (class_getInstanceMethod(convClass, markSel)) {
+            Method origMethod = class_getInstanceMethod(convClass, markSel);
+            DYYYOrigMarkConversationRead = method_setImplementation(origMethod, (IMP)DYYYReplacedMarkConversationRead);
+        }
+    }
+}
+
+%group DYYYBlockReadReceiptGroup
+%end // DYYYBlockReadReceiptGroup
+
+// ============================================================
+// 功能3: 阻止访客记录上传
+// ============================================================
+
+%group DYYYBlockVisitorUploadGroup
+
+// 策略1: Hook AWEProfileNavVisitorItemController — 主页访客入口控制器
+%hook AWEProfileNavVisitorItemController
+
+- (void)reportVisit {
+    if (DYYYGetBool(@"DYYYBlockVisitorUpload")) {
+        NSLog(@"[DYYY] Blocked profile visit report");
+        return;
+    }
+    %orig;
+}
+
+// 拦截访客列表加载后的上报
+- (void)didEnterVisitorsPage {
+    if (DYYYGetBool(@"DYYYBlockVisitorUpload")) {
+        NSLog(@"[DYYY] Blocked enter visitors page");
+        return;
+    }
+    %orig;
+}
+
+%end
+
+// 策略2: Hook NSURLSession 请求拦截
+%hook NSURLSession
+
+- (NSURLSessionDataTask *)dataTaskWithRequest:(NSURLRequest *)request completionHandler:(void (^)(NSData *, NSURLResponse *, NSError *))completionHandler {
+    // 拦截访客上报请求
+    if (DYYYGetBool(@"DYYYBlockVisitorUpload")) {
+        NSURL *url = request.URL;
+        if (url) {
+            NSString *host = url.host;
+            NSString *path = url.path;
+            // 精确匹配抖音访客上报 API（仅匹配 aweme 相关域名 + 访客路径）
+            if ([host containsString:@"aweme"] && [path containsString:@"/visitor"]) {
+                NSLog(@"[DYYY] Blocked visitor upload request: %@", url.absoluteString);
+                // 返回空数据，模拟成功响应
+                if (completionHandler) {
+                    NSURLResponse *response = [[NSHTTPURLResponse alloc] initWithURL:url statusCode:200 HTTPVersion:@"HTTP/1.1" headerFields:nil];
+                    completionHandler(nil, response, nil);
+                }
+                return nil;
+            }
+        }
+    }
+    return %orig;
+}
+
+%end
+
+%end // DYYYBlockVisitorUploadGroup
+
+// ============================================================
+// 构造函数：初始化所有功能
+// ============================================================
 
 %ctor {
-    // 延迟初始化，确保抖音已加载
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        DYYYLog(@"IM Enhancement initializing...");
-        
-        // 启用滑动手势
-        %init(DYYYIMSwipeActionsGroup);
-        
-        // 设置已读回执拦截
-        DYYYSetupReadReceiptHooks();
-        
-        // 设置访客记录拦截
-        DYYYSetupVisitorHooks();
-        
-        DYYYLog(@"IM Enhancement initialized");
-    });
+    // 关键修复：%init 必须无条件执行！
+    // 开关检查已在各 hook 方法内部处理
+    // 如果放在条件里，用户在设置中打开开关后 %ctor 不会重新执行，功能永远不生效
+    
+    // 初始化功能1: 滑动手势（开关在 didMoveToSuperview 和 handleSwipeGesture 内检查）
+    %init(DYYYIMSwipeActionsGroup);
+    
+    // 初始化功能2: 阻止已读回执（开关在替换函数内检查）
+    DYYYSetupReadReceiptHooks();
+    %init(DYYYBlockReadReceiptGroup);
+    
+    // 初始化功能3: 阻止访客记录（开关在 reportVisit/didEnterVisitorsPage/dataTaskWithRequest 内检查）
+    %init(DYYYBlockVisitorUploadGroup);
 }

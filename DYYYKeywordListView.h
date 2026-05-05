@@ -1,12 +1,19 @@
-//
-//  DYYYKeywordListView.h
-//  DYYY-Optimized
-//
-
 #import <UIKit/UIKit.h>
 
-@interface DYYYKeywordListView : UIView
+NS_ASSUME_NONNULL_BEGIN
 
-+ (void)showWithTitle:(NSString *)title keywords:(NSArray<NSString *> *)keywords completion:(void (^)(NSArray<NSString *> *))completion;
+@interface DYYYKeywordListView : UIView <UITableViewDelegate, UITableViewDataSource>
+
+@property(nonatomic, copy) void (^onConfirm)(NSArray *keywords);
+@property(nonatomic, copy) void (^onCancel)(void);
+@property(nonatomic, copy) NSString *addItemTitle;
+@property(nonatomic, copy) NSString *editItemTitle;
+@property(nonatomic, copy) NSString *inputPlaceholder;
+
+- (instancetype)initWithTitle:(NSString *)title keywords:(NSArray *_Nullable)keywords;
+- (void)show;
+- (void)dismiss;
 
 @end
+
+NS_ASSUME_NONNULL_END

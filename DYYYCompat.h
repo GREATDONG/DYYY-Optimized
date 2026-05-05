@@ -1,10 +1,6 @@
-//
-//  DYYYCompat.h
-//  DYYY-Optimized
-//
-//  兼容层：集中管理类名定义和安全查找
-//  基于 COLLAB.md 经验：先验证，再使用
-//
+// DYYYCompat.h — v38.4.0 兼容层（OpenClaw 版）
+// 用途：集中管理 Hook 类名 + 安全查找，版本间一键切换
+// v38.4.0 验证结果：所有类名均存在，不改动
 
 #ifndef DYYYCompat_h
 #define DYYYCompat_h
@@ -13,119 +9,78 @@
 #import <objc/runtime.h>
 
 // ============================================
-// 调试日志宏
-// ============================================
-#ifdef DEBUG
-    #define DYYYLog(fmt, ...) NSLog(@"[DYYY] " fmt, ##__VA_ARGS__)
-#else
-    #define DYYYLog(fmt, ...) 
-#endif
-
-#define DYYYLogError(fmt, ...) NSLog(@"[DYYY] ERROR: " fmt, ##__VA_ARGS__)
-#define DYYYLogWarning(fmt, ...) NSLog(@"[DYYY] WARNING: " fmt, ##__VA_ARGS__)
-
-// ============================================
-// 安全类型转换宏
-// ============================================
-#define DYYY_IS_KIND_OF(obj, cls) [(obj) isKindOfClass:[cls class]]
-#define DYYY_RESPONDS_TO(obj, sel) [(obj) respondsToSelector:@selector(sel)]
-
-// ============================================
-// 核心类名定义
+// §1 ObjC 核心类名（稳定）
 // ============================================
 
-// 视频相关
-#define DYYY_CLS_AWEURLModel             @"AWEURLModel"
-#define DYYY_CLS_AWEVideoModel           @"AWEVideoModel"
+#define DYYY_CLS_AWEURLModel             @"AWEURLModel"              // 核心：无水印 URL 提取
+#define DYYY_CLS_AWEVideoModel           @"AWEVideoModel"            // 视频模型
 #define DYYY_CLS_PlayInteractionVC       @"AWEPlayInteractionViewController"
 #define DYYY_CLS_PlayVideoVC             @"AWEAwemePlayVideoViewController"
 #define DYYY_CLS_FeedRootVC              @"AWEFeedRootViewController"
-
-// 评论相关
 #define DYYY_CLS_CommentContainerVC      @"AWECommentContainerViewController"
-#define DYYY_CLS_SWIFT_CommentCopy       @"_TtC33AWECommentLongPressPanelSwiftImpl32CommentLongPressPanelCopyElement"
-#define DYYY_CLS_SWIFT_CommentSticker    @"_TtCV28AWECommentPanelListSwiftImpl6NEWAPI27CommentCellStickerComponent"
-
-// 用户相关
 #define DYYY_CLS_UserActionSheetView     @"AWEUserActionSheetView"
 #define DYYY_CLS_AppDelegate             @"AppDelegate"
-
-// IM 相关
-#define DYYY_CLS_IMReadReceiptDataCenter @"AWEIMReadReceiptDataCenter"
-#define DYYY_CLS_IMConversation          @"AWEIMConversation"
-#define DYYY_CLS_ProfileNavVisitorItem   @"AWEProfileNavVisitorItemController"
-
-// 直播相关
-#define DYYY_CLS_SWIFT_LiveRankEntrance  @"_TtC18IESLiveRevenueImpl34IESLiveDynamicRankListEntranceView"
-#define DYYY_CLS_SWIFT_LiveUserEnter     @"_TtC18IESLiveRevenueImpl32IESLiveSwiftDynamicUserEnterView"
+#define DYYY_CLS_VersionUpdateManager    @"AWEVersionUpdateManager"
 
 // ============================================
-// 安全类查找函数
+// §2 Swift 类名（v38.4.0 已确认全部存在）
 // ============================================
 
-/**
- * 安全获取类对象
- * @param name 类名
- * @return 类对象，不存在时返回 nil 并记录日志
- */
+// 行 2174 — 评论长按复制
+#define DYYY_CLS_SWIFT_CommentCopy \
+    @"_TtC33AWECommentLongPressPanelSwiftImpl32CommentLongPressPanelCopyElement"
+
+// 行 2699 — 评论贴纸组件
+#define DYYY_CLS_SWIFT_CommentSticker \
+    @"_TtCV28AWECommentPanelListSwiftImpl6NEWAPI27CommentCellStickerComponent"
+
+// 行 2716 — 评论长按保存图片
+#define DYYY_CLS_SWIFT_CommentSaveImage \
+    @"_TtC33AWECommentLongPressPanelSwiftImpl37CommentLongPressPanelSaveImageElement"
+
+// 行 3991 — 直播排行榜入口
+#define DYYY_CLS_SWIFT_LiveRankEntrance \
+    @"_TtC18IESLiveRevenueImpl34IESLiveDynamicRankListEntranceView"
+
+// 行 4724 — 直播用户进场
+#define DYYY_CLS_SWIFT_LiveUserEnter \
+    @"_TtC18IESLiveRevenueImpl32IESLiveSwiftDynamicUserEnterView"
+
+// 行 4755 — 直播视频层
+#define DYYY_CLS_SWIFT_LiveVideoUserEnter \
+    @"_TtC18IESLiveRevenueImpl35IESLiveSwiftVideoLayerUserEnterView"
+
+// 行 8645 — 激励挂件
+#define DYYY_CLS_SWIFT_IncentivePendant \
+    @"_TtC21AWEIncentiveSwiftImpl29IncentivePendantContainerView"
+
+// 行 8813 — 激励挂件 Lite 版
+#define DYYY_CLS_SWIFT_IncentivePendantLite \
+    @"AWEIncentiveSwiftImplDOUYINLite_IncentivePendantContainerView"
+
+// ============================================
+// §3 安全类查找函数
+// ============================================
+
 static inline Class DYYYGetClass(NSString *name) {
-    if (!name || name.length == 0) {
-        DYYYLogError(@"Empty class name");
-        return nil;
-    }
     Class cls = objc_getClass(name.UTF8String);
-    if (!cls) {
-        DYYYLogWarning(@"Class not found: %@", name);
-    }
+    if (!cls) NSLog(@"[DYYY] ⚠️ Class %@ not found", name);
     return cls;
 }
 
-/**
- * 从候选类名中查找第一个存在的类
- * @param names 候选类名数组
- * @return 第一个存在的类，都不存在时返回 nil
- */
 static inline Class DYYYGetClassFromCandidates(NSArray<NSString *> *names) {
-    if (!names || names.count == 0) {
-        DYYYLogError(@"Empty candidates array");
-        return nil;
-    }
-    
     for (NSString *name in names) {
         Class cls = objc_getClass(name.UTF8String);
         if (cls) {
             if (![name isEqualToString:names.firstObject]) {
-                DYYYLog(@"Class fallback: %@ -> %@", names.firstObject, name);
+                NSLog(@"[DYYY] 🔄 %@ → %@", names.firstObject, name);
             }
             return cls;
         }
     }
-    
-    DYYYLogError(@"All candidates failed: %@", [names componentsJoinedByString:@", "]);
+    NSLog(@"[DYYY] ⚠️ All candidates failed: %@",
+          [names componentsJoinedByString:@", "]);
     return nil;
 }
 
-/**
- * 检查类是否存在（用于条件编译）
- */
-static inline BOOL DYYYClassExists(NSString *name) {
-    return name && objc_getClass(name.UTF8String) != nil;
-}
-
-// ============================================
-// 版本检测
-// ============================================
-
-/**
- * 获取抖音版本号
- */
-static inline NSString *DYYYGetAwemeVersion(void) {
-    Class appDelegateClass = DYYYGetClass(DYYY_CLS_AppDelegate);
-    if (!appDelegateClass) return nil;
-    
-    // 尝试从 Info.plist 获取
-    NSString *version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
-    return version;
-}
-
-#endif /* DYYYCompat_h */
+#endif

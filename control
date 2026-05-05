@@ -1,11 +1,12 @@
-Package: com.dyyy.optimized
-Name: DYYY-Optimized
-Version: 2.4-1
-Description: 抖音优化版 v2.4 - 修复IM功能/代码优化/稳定性提升
-Homepage: https://github.com/yourusername/DYYY-Optimized
+Package: com.huami.dyyy
+Name: DYYY
+Version: 2.3-1
+Description: 抖音优化版 v2.3 - Swift Hook安全模式/模块化架构/画质增强/评论管理/直播优化
+Homepage: https://github.com/huami1314/DYYY
 Section: Tweaks
 Depends: firmware (>= 5.0), mobilesubstrate
 Priority: optional
-Maintainer: DYYY Team
-Author: DYYY Team
+Maintainer: huami
+Author: huami
 Architecture: iphoneos-arm
+Icon: https://Mieing.Github.io/repo/file/TikTok.png

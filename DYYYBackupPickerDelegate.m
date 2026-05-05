@@ -1,32 +1,24 @@
-//
-//  DYYYBackupPickerDelegate.m
-//  DYYY-Optimized
-//
-
 #import "DYYYBackupPickerDelegate.h"
 
 @implementation DYYYBackupPickerDelegate
-
-+ (void)presentFromViewController:(UIViewController *)viewController completion:(void (^)(NSURL *url))completion {
-    DYYYBackupPickerDelegate *delegate = [[self alloc] init];
-    delegate.onBackupSelected = completion;
-    
-    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[@"public.json"] inMode:UIDocumentPickerModeImport];
-    picker.delegate = delegate;
-    
-    objc_setAssociatedObject(picker, @"delegate", delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    
-    [viewController presentViewController:picker animated:YES completion:nil];
-}
-
 - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
-    if (urls.count > 0 && self.onBackupSelected) {
-        self.onBackupSelected(urls.firstObject);
+    if (urls.count > 0 && self.completionBlock) {
+        self.completionBlock(urls.firstObject);
     }
+    [self cleanupTempFile];
 }
 
 - (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
-    // 取消选择
+    [self cleanupTempFile];
 }
 
+- (void)cleanupTempFile {
+    if (self.tempFilePath && [[NSFileManager defaultManager] fileExistsAtPath:self.tempFilePath]) {
+        NSError *error = nil;
+        [[NSFileManager defaultManager] removeItemAtPath:self.tempFilePath error:&error];
+        if (error) {
+            NSLog(@"[DYYY] \u6e05\u7406\u4e34\u65f6\u6587\u4ef6\u5931\u8d25: %@", error.localizedDescription);
+        }
+    }
+}
 @end
