@@ -1,0 +1,59 @@
+name: Build DYYY-Optimized
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    runs-on: macos-14
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check cache
+        run: |
+          echo "upstream_heads=`git ls-remote https://github.com/roothide/theos | head -n 1 | cut -f 1`-`git ls-remote https://github.com/theos/sdks | head -n 1 | cut -f 1`" >> $GITHUB_ENV
+
+      - name: Cache Theos
+        id: cache
+        uses: actions/cache@v4.2.1
+        with:
+          path: ${{ github.workspace }}/theos
+          key: ${{ runner.os }}-${{ env.upstream_heads }}
+
+      - name: Prepare Theos
+        uses: huami1314/theos-action@main
+
+      - name: Setup GNU Make
+        run: |
+          echo "$(brew --prefix)/opt/make/libexec/gnubin" >> $GITHUB_PATH
+
+      - name: Build Standard Package
+        run: |
+          rm -rf packages/*
+          make package FINALPACKAGE=1 -j$(sysctl -n hw.ncpu)
+
+      - name: Build Rootless Package
+        run: |
+          make package SCHEME=rootless FINALPACKAGE=1 -j$(sysctl -n hw.ncpu)
+
+      - name: Build RootHide Package
+        run: |
+          make package SCHEME=roothide FINALPACKAGE=1 -j$(sysctl -n hw.ncpu)
+
+      - name: List Packages
+        run: |
+          ls -la packages/
+
+      - name: Upload Packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: DYYY-Optimized-Packages
+          path: ${{ github.workspace }}/packages/*.deb

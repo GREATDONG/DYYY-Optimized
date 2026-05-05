@@ -1,0 +1,11 @@
+Package: com.dyyy.optimized
+Name: DYYY-Optimized
+Version: 2.4-1
+Description: 抖音优化版 v2.4 - 修复IM功能/代码优化/稳定性提升
+Homepage: https://github.com/yourusername/DYYY-Optimized
+Section: Tweaks
+Depends: firmware (>= 5.0), mobilesubstrate
+Priority: optional
+Maintainer: DYYY Team
+Author: DYYY Team
+Architecture: iphoneos-arm
