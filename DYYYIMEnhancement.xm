@@ -220,7 +220,6 @@ static void DYYYRecallMessage(id cell, id message) {
 
 // ============================================================
 // MARK: - Feature 2 & 3: Network Request Interception
-// Combined into one group to avoid duplicate NSURLSession hooks
 // ============================================================
 
 %group DYYYNetworkInterceptGroup
@@ -278,97 +277,107 @@ static void DYYYRecallMessage(id cell, id message) {
 %end // DYYYNetworkInterceptGroup
 
 // ============================================================
-// MARK: - Runtime Hooks for Feature 2 & 3
+// MARK: - Runtime Hooks for Feature 2 & 3 (using method_setImplementation)
 // ============================================================
+
+static IMP DYYYOrigReportReadReceipt = NULL;
+static IMP DYYYOrigAckRead = NULL;
+static IMP DYYYOrigSendReadReceipt = NULL;
+static IMP DYYYOrigMarkConversationRead = NULL;
+static IMP DYYYOrigReportVisit = NULL;
+static IMP DYYYOrigDidEnterVisitorsPage = NULL;
+
+static void DYYYReplacedReportReadReceipt(id self, SEL _cmd, id arg1) {
+    if (DYYYGetBool(@"DYYYBlockReadReceipt")) {
+        NSLog(@"[DYYY] Blocked reportReadReceipt:");
+        return;
+    }
+    if (DYYYOrigReportReadReceipt) {
+        ((void (*)(id, SEL, id))DYYYOrigReportReadReceipt)(self, _cmd, arg1);
+    }
+}
+
+static void DYYYReplacedAckRead(id self, SEL _cmd, id arg1) {
+    if (DYYYGetBool(@"DYYYBlockReadReceipt")) {
+        NSLog(@"[DYYY] Blocked ackRead:");
+        return;
+    }
+    if (DYYYOrigAckRead) {
+        ((void (*)(id, SEL, id))DYYYOrigAckRead)(self, _cmd, arg1);
+    }
+}
+
+static void DYYYReplacedSendReadReceipt(id self, SEL _cmd, id arg1) {
+    if (DYYYGetBool(@"DYYYBlockReadReceipt")) {
+        NSLog(@"[DYYY] Blocked sendReadReceipt:");
+        return;
+    }
+    if (DYYYOrigSendReadReceipt) {
+        ((void (*)(id, SEL, id))DYYYOrigSendReadReceipt)(self, _cmd, arg1);
+    }
+}
+
+static void DYYYReplacedMarkConversationRead(id self, SEL _cmd) {
+    if (DYYYGetBool(@"DYYYBlockReadReceipt")) {
+        NSLog(@"[DYYY] Blocked markConversationRead");
+        return;
+    }
+    if (DYYYOrigMarkConversationRead) {
+        ((void (*)(id, SEL))DYYYOrigMarkConversationRead)(self, _cmd);
+    }
+}
+
+static void DYYYReplacedReportVisit(id self, SEL _cmd) {
+    if (DYYYGetBool(@"DYYYBlockVisitorUpload")) {
+        NSLog(@"[DYYY] Blocked reportVisit");
+        return;
+    }
+    if (DYYYOrigReportVisit) {
+        ((void (*)(id, SEL))DYYYOrigReportVisit)(self, _cmd);
+    }
+}
+
+static void DYYYReplacedDidEnterVisitorsPage(id self, SEL _cmd) {
+    if (DYYYGetBool(@"DYYYBlockVisitorUpload")) {
+        NSLog(@"[DYYY] Blocked didEnterVisitorsPage");
+        return;
+    }
+    if (DYYYOrigDidEnterVisitorsPage) {
+        ((void (*)(id, SEL))DYYYOrigDidEnterVisitorsPage)(self, _cmd);
+    }
+}
 
 static void DYYYSetupRuntimeHooks() {
     // Feature 2: Hook read receipt classes
     Class readReceiptClass = objc_getClass("AWEIMReadReceiptDataCenter");
     if (readReceiptClass) {
         NSLog(@"[DYYY] Hooking AWEIMReadReceiptDataCenter");
-
-        SEL reportSel = @selector(reportReadReceipt:);
-        if (class_getInstanceMethod(readReceiptClass, reportSel)) {
-            MSHookMessageEx(readReceiptClass, reportSel,
-                ^(id self, id arg1) {
-                    if (DYYYGetBool(@"DYYYBlockReadReceipt")) {
-                        NSLog(@"[DYYY] Blocked reportReadReceipt:");
-                        return;
-                    }
-                    ((void (*)(id, SEL, id))objc_msgSend)(self, reportSel, arg1);
-                });
-        }
-
-        SEL ackSel = @selector(ackRead:);
-        if (class_getInstanceMethod(readReceiptClass, ackSel)) {
-            MSHookMessageEx(readReceiptClass, ackSel,
-                ^(id self, id arg1) {
-                    if (DYYYGetBool(@"DYYYBlockReadReceipt")) {
-                        NSLog(@"[DYYY] Blocked ackRead:");
-                        return;
-                    }
-                    ((void (*)(id, SEL, id))objc_msgSend)(self, ackSel, arg1);
-                });
-        }
-
-        SEL sendSel = @selector(sendReadReceipt:);
-        if (class_getInstanceMethod(readReceiptClass, sendSel)) {
-            MSHookMessageEx(readReceiptClass, sendSel,
-                ^(id self, id arg1) {
-                    if (DYYYGetBool(@"DYYYBlockReadReceipt")) {
-                        NSLog(@"[DYYY] Blocked sendReadReceipt:");
-                        return;
-                    }
-                    ((void (*)(id, SEL, id))objc_msgSend)(self, sendSel, arg1);
-                });
-        }
+        Method m;
+        m = class_getInstanceMethod(readReceiptClass, @selector(reportReadReceipt:));
+        if (m) DYYYOrigReportReadReceipt = method_setImplementation(m, (IMP)DYYYReplacedReportReadReceipt);
+        m = class_getInstanceMethod(readReceiptClass, @selector(ackRead:));
+        if (m) DYYYOrigAckRead = method_setImplementation(m, (IMP)DYYYReplacedAckRead);
+        m = class_getInstanceMethod(readReceiptClass, @selector(sendReadReceipt:));
+        if (m) DYYYOrigSendReadReceipt = method_setImplementation(m, (IMP)DYYYReplacedSendReadReceipt);
     } else {
         NSLog(@"[DYYY] AWEIMReadReceiptDataCenter not found");
     }
 
     Class convClass = objc_getClass("AWEIMConversation");
     if (convClass) {
-        SEL markSel = @selector(markConversationRead);
-        if (class_getInstanceMethod(convClass, markSel)) {
-            MSHookMessageEx(convClass, markSel,
-                ^(id self) {
-                    if (DYYYGetBool(@"DYYYBlockReadReceipt")) {
-                        NSLog(@"[DYYY] Blocked markConversationRead");
-                        return;
-                    }
-                    ((void (*)(id, SEL))objc_msgSend)(self, markSel);
-                });
-        }
+        Method m = class_getInstanceMethod(convClass, @selector(markConversationRead));
+        if (m) DYYYOrigMarkConversationRead = method_setImplementation(m, (IMP)DYYYReplacedMarkConversationRead);
     }
 
     // Feature 3: Hook visitor classes
     Class visitorVCClass = objc_getClass("AWEProfileNavVisitorItemController");
     if (visitorVCClass) {
         NSLog(@"[DYYY] Hooking AWEProfileNavVisitorItemController");
-
-        SEL reportSel = @selector(reportVisit);
-        if (class_getInstanceMethod(visitorVCClass, reportSel)) {
-            MSHookMessageEx(visitorVCClass, reportSel,
-                ^(id self) {
-                    if (DYYYGetBool(@"DYYYBlockVisitorUpload")) {
-                        NSLog(@"[DYYY] Blocked reportVisit");
-                        return;
-                    }
-                    ((void (*)(id, SEL))objc_msgSend)(self, reportSel);
-                });
-        }
-
-        SEL enterSel = @selector(didEnterVisitorsPage);
-        if (class_getInstanceMethod(visitorVCClass, enterSel)) {
-            MSHookMessageEx(visitorVCClass, enterSel,
-                ^(id self) {
-                    if (DYYYGetBool(@"DYYYBlockVisitorUpload")) {
-                        NSLog(@"[DYYY] Blocked didEnterVisitorsPage");
-                        return;
-                    }
-                    ((void (*)(id, SEL))objc_msgSend)(self, enterSel);
-                });
-        }
+        Method m;
+        m = class_getInstanceMethod(visitorVCClass, @selector(reportVisit));
+        if (m) DYYYOrigReportVisit = method_setImplementation(m, (IMP)DYYYReplacedReportVisit);
+        m = class_getInstanceMethod(visitorVCClass, @selector(didEnterVisitorsPage));
+        if (m) DYYYOrigDidEnterVisitorsPage = method_setImplementation(m, (IMP)DYYYReplacedDidEnterVisitorsPage);
     } else {
         NSLog(@"[DYYY] AWEProfileNavVisitorItemController not found");
     }
