@@ -22,38 +22,28 @@
 
 static char kDYYYSwipeGestureKey;
 
-// Get message object from cell via currentContext property
 static id DYYYGetMessageFromCell(id cell) {
     if (!cell) return nil;
-
-    // AWEIMReusableCommonCell has currentContext property
     if ([cell respondsToSelector:@selector(currentContext)]) {
         id context = ((id (*)(id, SEL))objc_msgSend)(cell, @selector(currentContext));
         if (context && [context respondsToSelector:@selector(message)]) {
             return ((id (*)(id, SEL))objc_msgSend)(context, @selector(message));
         }
     }
-
-    // Try context property
     if ([cell respondsToSelector:@selector(context)]) {
         id context = ((id (*)(id, SEL))objc_msgSend)(cell, @selector(context));
         if (context && [context respondsToSelector:@selector(message)]) {
             return ((id (*)(id, SEL))objc_msgSend)(context, @selector(message));
         }
     }
-
-    // Try direct message property
     if ([cell respondsToSelector:@selector(message)]) {
         return ((id (*)(id, SEL))objc_msgSend)(cell, @selector(message));
     }
-
     return nil;
 }
 
-// Get message sender ID
 static NSString *DYYYGetMessageSenderID(id message) {
     if (!message) return nil;
-
     if ([message respondsToSelector:@selector(fromUserId)]) {
         return ((NSString *(*)(id, SEL))objc_msgSend)(message, @selector(fromUserId));
     }
@@ -69,21 +59,15 @@ static NSString *DYYYGetMessageSenderID(id message) {
     return nil;
 }
 
-// Get current logged-in user ID
 static NSString *DYYYGetCurrentUserID() {
     Class cls = objc_getClass("AWEAccountService");
     if (!cls) cls = objc_getClass("AWELoginService");
     if (!cls) return nil;
-
     SEL sharedSel = @selector(sharedInstance);
-    if (!class_getClassMethod(cls, sharedSel)) {
-        sharedSel = @selector(shared);
-    }
+    if (!class_getClassMethod(cls, sharedSel)) sharedSel = @selector(shared);
     if (!class_getClassMethod(cls, sharedSel)) return nil;
-
     id service = ((id (*)(id, SEL))objc_msgSend)(cls, sharedSel);
     if (!service) return nil;
-
     if ([service respondsToSelector:@selector(userId)]) {
         return ((NSString *(*)(id, SEL))objc_msgSend)(service, @selector(userId));
     }
@@ -93,10 +77,8 @@ static NSString *DYYYGetCurrentUserID() {
     return nil;
 }
 
-// Get message ID
 static NSString *DYYYGetMessageID(id message) {
     if (!message) return nil;
-
     if ([message respondsToSelector:@selector(msgId)]) {
         return ((NSString *(*)(id, SEL))objc_msgSend)(message, @selector(msgId));
     }
@@ -106,16 +88,12 @@ static NSString *DYYYGetMessageID(id message) {
     return nil;
 }
 
-// Find the chat conversation controller from the cell
 static id DYYYGetConversationFromCell(id cell) {
     if (!cell) return nil;
-
-    // Walk up the responder chain to find a view controller
     UIResponder *responder = cell;
     while (responder) {
         if ([responder isKindOfClass:[UIViewController class]]) {
             UIViewController *vc = (UIViewController *)responder;
-            // Try to get conversation from the VC
             if ([vc respondsToSelector:@selector(conversation)]) {
                 return ((id (*)(id, SEL))objc_msgSend)(vc, @selector(conversation));
             }
@@ -131,14 +109,9 @@ static id DYYYGetConversationFromCell(id cell) {
     return nil;
 }
 
-// Quote message action
 static void DYYYQuoteMessage(id cell, id message) {
-    NSString *msgId = DYYYGetMessageID(message);
-
-    // Try to find the conversation and call reply method
     id conversation = DYYYGetConversationFromCell(cell);
     if (conversation) {
-        // Try various reply/quote selectors
         SEL selectors[] = {
             @selector(replyToMessage:),
             @selector(quoteMessage:),
@@ -148,40 +121,31 @@ static void DYYYQuoteMessage(id cell, id message) {
         for (int i = 0; i < sizeof(selectors)/sizeof(selectors[0]); i++) {
             if ([conversation respondsToSelector:selectors[i]]) {
                 ((void (*)(id, SEL, id))objc_msgSend)(conversation, selectors[i], message);
-                NSLog(@"[DYYY] Quote message via %@", NSStringFromSelector(selectors[i]));
+                NSLog(@"[DYYY] Quote via %@", NSStringFromSelector(selectors[i]));
                 return;
             }
         }
     }
-
-    // Fallback: try to trigger the input bar's quote mode via responder chain
     UIResponder *responder = cell;
     while (responder) {
         if ([responder respondsToSelector:@selector(replyToMessage:)]) {
             ((void (*)(id, SEL, id))objc_msgSend)(responder, @selector(replyToMessage:), message);
-            NSLog(@"[DYYY] Quote message via responder chain");
+            NSLog(@"[DYYY] Quote via responder chain");
             return;
         }
         responder = [responder nextResponder];
     }
-
-    NSLog(@"[DYYY] Quote: no handler found for msgId=%@", msgId);
+    NSLog(@"[DYYY] Quote: no handler found");
     [DYYYToast showSuccessToastWithMessage:@"引用功能暂不可用"];
 }
 
-// Recall message action
 static void DYYYRecallMessage(id cell, id message) {
     NSString *senderId = DYYYGetMessageSenderID(message);
     NSString *currentUserId = DYYYGetCurrentUserID();
-
-    // Only recall own messages
     if (senderId && currentUserId && ![senderId isEqualToString:currentUserId]) {
         [DYYYToast showSuccessToastWithMessage:@"只能撤回自己的消息"];
         return;
     }
-
-    NSString *msgId = DYYYGetMessageID(message);
-
     id conversation = DYYYGetConversationFromCell(cell);
     if (conversation) {
         SEL selectors[] = {
@@ -193,13 +157,12 @@ static void DYYYRecallMessage(id cell, id message) {
         for (int i = 0; i < sizeof(selectors)/sizeof(selectors[0]); i++) {
             if ([conversation respondsToSelector:selectors[i]]) {
                 ((void (*)(id, SEL, id))objc_msgSend)(conversation, selectors[i], message);
-                NSLog(@"[DYYY] Recall message via %@", NSStringFromSelector(selectors[i]));
+                NSLog(@"[DYYY] Recall via %@", NSStringFromSelector(selectors[i]));
                 return;
             }
         }
     }
-
-    NSLog(@"[DYYY] Recall: no handler found for msgId=%@", msgId);
+    NSLog(@"[DYYY] Recall: no handler found");
     [DYYYToast showSuccessToastWithMessage:@"撤回功能暂不可用"];
 }
 
@@ -209,24 +172,17 @@ static void DYYYRecallMessage(id cell, id message) {
 
 - (void)didMoveToSuperview {
     %orig;
-
-    // Only add gestures when the toggle is ON
     if (!DYYYGetBool(@"DYYYEnableSwipeActions")) return;
-
-    // Avoid duplicate gestures
     for (UIGestureRecognizer *g in self.gestureRecognizers) {
         NSString *tag = objc_getAssociatedObject(g, &kDYYYSwipeGestureKey);
         if (tag && [tag hasPrefix:@"DYYY"]) return;
     }
-
-    // Left swipe -> Quote
     UISwipeGestureRecognizer *leftSwipe = [[UISwipeGestureRecognizer alloc]
         initWithTarget:self action:@selector(dyyy_handleSwipeLeft:)];
     leftSwipe.direction = UISwipeGestureRecognizerDirectionLeft;
     objc_setAssociatedObject(leftSwipe, &kDYYYSwipeGestureKey, @"DYYYLeft", OBJC_ASSOCIATION_RETAIN);
     [self addGestureRecognizer:leftSwipe];
 
-    // Right swipe -> Recall
     UISwipeGestureRecognizer *rightSwipe = [[UISwipeGestureRecognizer alloc]
         initWithTarget:self action:@selector(dyyy_handleSwipeRight:)];
     rightSwipe.direction = UISwipeGestureRecognizerDirectionRight;
@@ -237,10 +193,10 @@ static void DYYYRecallMessage(id cell, id message) {
 %new
 - (void)dyyy_handleSwipeLeft:(UISwipeGestureRecognizer *)gesture {
     if (!DYYYGetBool(@"DYYYEnableSwipeActions")) return;
-    NSLog(@"[DYYY] Left swipe detected on cell");
+    NSLog(@"[DYYY] Left swipe on cell");
     id message = DYYYGetMessageFromCell(self);
     if (!message) {
-        NSLog(@"[DYYY] Left swipe: could not get message from cell");
+        NSLog(@"[DYYY] Left swipe: no message");
         return;
     }
     DYYYQuoteMessage(self, message);
@@ -249,10 +205,10 @@ static void DYYYRecallMessage(id cell, id message) {
 %new
 - (void)dyyy_handleSwipeRight:(UISwipeGestureRecognizer *)gesture {
     if (!DYYYGetBool(@"DYYYEnableSwipeActions")) return;
-    NSLog(@"[DYYY] Right swipe detected on cell");
+    NSLog(@"[DYYY] Right swipe on cell");
     id message = DYYYGetMessageFromCell(self);
     if (!message) {
-        NSLog(@"[DYYY] Right swipe: could not get message from cell");
+        NSLog(@"[DYYY] Right swipe: no message");
         return;
     }
     DYYYRecallMessage(self, message);
@@ -263,25 +219,28 @@ static void DYYYRecallMessage(id cell, id message) {
 %end // DYYYIMSwipeActionsGroup
 
 // ============================================================
-// MARK: - Feature 2: Block Read Receipts
+// MARK: - Feature 2 & 3: Network Request Interception
+// Combined into one group to avoid duplicate NSURLSession hooks
 // ============================================================
 
-%group DYYYBlockReadReceiptGroup
+%group DYYYNetworkInterceptGroup
 
 %hook NSURLSession
 
 - (NSURLSessionDataTask *)dataTaskWithRequest:(NSURLRequest *)request completionHandler:(void (^)(NSData *, NSURLResponse *, NSError *))completionHandler {
-    if (DYYYGetBool(@"DYYYBlockReadReceipt")) {
-        NSURL *url = request.URL;
-        if (url) {
-            NSString *absoluteString = url.absoluteString;
-            // Match read receipt API endpoints
+    NSURL *url = request.URL;
+    if (url) {
+        NSString *absoluteString = url.absoluteString;
+        NSString *path = url.path;
+
+        // Feature 2: Block read receipts
+        if (DYYYGetBool(@"DYYYBlockReadReceipt")) {
             if (([absoluteString containsString:@"read_receipt"] ||
                  [absoluteString containsString:@"readreceipt"] ||
                  [absoluteString containsString:@"mark_read"] ||
                  [absoluteString containsString:@"ack_read"]) &&
                 ![absoluteString containsString:@"feed"]) {
-                NSLog(@"[DYYY] Blocked read receipt request: %@", absoluteString);
+                NSLog(@"[DYYY] Blocked read receipt: %@", absoluteString);
                 if (completionHandler) {
                     NSURLResponse *response = [[NSHTTPURLResponse alloc]
                         initWithURL:url statusCode:200 HTTPVersion:@"HTTP/1.1" headerFields:nil];
@@ -290,16 +249,43 @@ static void DYYYRecallMessage(id cell, id message) {
                 return nil;
             }
         }
+
+        // Feature 3: Block visitor records
+        if (DYYYGetBool(@"DYYYBlockVisitorUpload")) {
+            if ([path containsString:@"/visitor"] ||
+                [path containsString:@"/profile_visit"] ||
+                [path containsString:@"/visit_record"] ||
+                [absoluteString containsString:@"visitor"] ||
+                [absoluteString containsString:@"profile_visit"]) {
+                NSString *method = request.HTTPMethod;
+                if ([method isEqualToString:@"POST"] || [method isEqualToString:@"PUT"]) {
+                    NSLog(@"[DYYY] Blocked visitor upload: %@", absoluteString);
+                    if (completionHandler) {
+                        NSURLResponse *response = [[NSHTTPURLResponse alloc]
+                            initWithURL:url statusCode:200 HTTPVersion:@"HTTP/1.1" headerFields:nil];
+                        completionHandler(nil, response, nil);
+                    }
+                    return nil;
+                }
+            }
+        }
     }
     return %orig;
 }
 
 %end
 
-static void DYYYHookReadReceiptClasses() {
+%end // DYYYNetworkInterceptGroup
+
+// ============================================================
+// MARK: - Runtime Hooks for Feature 2 & 3
+// ============================================================
+
+static void DYYYSetupRuntimeHooks() {
+    // Feature 2: Hook read receipt classes
     Class readReceiptClass = objc_getClass("AWEIMReadReceiptDataCenter");
     if (readReceiptClass) {
-        NSLog(@"[DYYY] Found AWEIMReadReceiptDataCenter, hooking read receipt methods");
+        NSLog(@"[DYYY] Hooking AWEIMReadReceiptDataCenter");
 
         SEL reportSel = @selector(reportReadReceipt:);
         if (class_getInstanceMethod(readReceiptClass, reportSel)) {
@@ -337,7 +323,7 @@ static void DYYYHookReadReceiptClasses() {
                 });
         }
     } else {
-        NSLog(@"[DYYY] AWEIMReadReceiptDataCenter not found, relying on NSURLSession hook");
+        NSLog(@"[DYYY] AWEIMReadReceiptDataCenter not found");
     }
 
     Class convClass = objc_getClass("AWEIMConversation");
@@ -354,57 +340,11 @@ static void DYYYHookReadReceiptClasses() {
                 });
         }
     }
-}
 
-%end // DYYYBlockReadReceiptGroup
-
-// ============================================================
-// MARK: - Feature 3: Block Visitor Records
-// ============================================================
-
-%group DYYYBlockVisitorUploadGroup
-
-%hook NSURLSession
-
-- (NSURLSessionDataTask *)dataTaskWithRequest:(NSURLRequest *)request completionHandler:(void (^)(NSData *, NSURLResponse *, NSError *))completionHandler {
-    if (DYYYGetBool(@"DYYYBlockVisitorUpload")) {
-        NSURL *url = request.URL;
-        if (url) {
-            NSString *absoluteString = url.absoluteString;
-            NSString *path = url.path;
-
-            BOOL isVisitorRequest = NO;
-            if ([path containsString:@"/visitor"] ||
-                [path containsString:@"/profile_visit"] ||
-                [path containsString:@"/visit_record"] ||
-                [absoluteString containsString:@"visitor"] ||
-                [absoluteString containsString:@"profile_visit"]) {
-                NSString *method = request.HTTPMethod;
-                if ([method isEqualToString:@"POST"] || [method isEqualToString:@"PUT"]) {
-                    isVisitorRequest = YES;
-                }
-            }
-
-            if (isVisitorRequest) {
-                NSLog(@"[DYYY] Blocked visitor upload request: %@", absoluteString);
-                if (completionHandler) {
-                    NSURLResponse *response = [[NSHTTPURLResponse alloc]
-                        initWithURL:url statusCode:200 HTTPVersion:@"HTTP/1.1" headerFields:nil];
-                    completionHandler(nil, response, nil);
-                }
-                return nil;
-            }
-        }
-    }
-    return %orig;
-}
-
-%end
-
-static void DYYYHookVisitorClasses() {
+    // Feature 3: Hook visitor classes
     Class visitorVCClass = objc_getClass("AWEProfileNavVisitorItemController");
     if (visitorVCClass) {
-        NSLog(@"[DYYY] Found AWEProfileNavVisitorItemController, hooking visitor methods");
+        NSLog(@"[DYYY] Hooking AWEProfileNavVisitorItemController");
 
         SEL reportSel = @selector(reportVisit);
         if (class_getInstanceMethod(visitorVCClass, reportSel)) {
@@ -430,11 +370,9 @@ static void DYYYHookVisitorClasses() {
                 });
         }
     } else {
-        NSLog(@"[DYYY] AWEProfileNavVisitorItemController not found, relying on NSURLSession hook");
+        NSLog(@"[DYYY] AWEProfileNavVisitorItemController not found");
     }
 }
-
-%end // DYYYBlockVisitorUploadGroup
 
 // ============================================================
 // MARK: - Constructor
@@ -443,17 +381,10 @@ static void DYYYHookVisitorClasses() {
 %ctor {
     NSLog(@"[DYYY] DYYYIMEnhancement loading...");
 
-    // Feature 1: Swipe gestures
     %init(DYYYIMSwipeActionsGroup);
     NSLog(@"[DYYY] IM Swipe Actions initialized");
 
-    // Feature 2: Block read receipts
-    %init(DYYYBlockReadReceiptGroup);
-    DYYYHookReadReceiptClasses();
-    NSLog(@"[DYYY] IM Read Receipt Block initialized");
-
-    // Feature 3: Block visitor records
-    %init(DYYYBlockVisitorUploadGroup);
-    DYYYHookVisitorClasses();
-    NSLog(@"[DYYY] IM Visitor Block initialized");
+    %init(DYYYNetworkInterceptGroup);
+    DYYYSetupRuntimeHooks();
+    NSLog(@"[DYYY] IM Network Interception initialized");
 }
