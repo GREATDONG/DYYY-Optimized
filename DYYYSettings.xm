@@ -752,6 +752,33 @@ void showDYYYSettingsVC(UIViewController *rootVC, BOOL hasAgreed) {
       [sections addObject:[DYYYSettingsHelper createSectionWithTitle:@"过滤与屏蔽" footerTitle:@"请不要同时开启过多过滤推荐项目，这会增大视频流加载延迟。" items:filterItems]];
       [sections addObject:[DYYYSettingsHelper createSectionWithTitle:@"二次确认" items:securityItems]];
 
+      // 【IM 增强】分类
+      NSMutableArray<AWESettingItemModel *> *imItems = [NSMutableArray array];
+      NSArray *imSettings = @[
+          @{@"identifier" : @"DYYYEnableSwipeActions",
+            @"title" : @"聊天滑动手势",
+            @"detail" : @"左滑引用消息，右滑撤回消息",
+            @"cellType" : @6,
+            @"imageName" : @"ic_reply_outlined_20"},
+          @{@"identifier" : @"DYYYBlockReadReceipt",
+            @"title" : @"阻止已读回执",
+            @"detail" : @"对方不会看到你已读消息",
+            @"cellType" : @6,
+            @"imageName" : @"ic_eye_close_outlined_20"},
+          @{@"identifier" : @"DYYYBlockVisitorUpload",
+            @"title" : @"阻止访客记录",
+            @"detail" : @"访问他人主页不留访客记录",
+            @"cellType" : @6,
+            @"imageName" : @"ic_visibility_off_outlined_20"}
+      ];
+
+      for (NSDictionary *dict in imSettings) {
+          AWESettingItemModel *item = [DYYYSettingsHelper createSettingItem:dict];
+          [imItems addObject:item];
+      }
+
+      [sections addObject:[DYYYSettingsHelper createSectionWithTitle:@"IM 增强" items:imItems]];
+
       // 创建并推入二级设置页面
       AWESettingBaseViewController *subVC = [DYYYSettingsHelper createSubSettingsViewController:@"基本设置" sections:sections];
       [rootVC.navigationController pushViewController:(UIViewController *)subVC animated:YES];
