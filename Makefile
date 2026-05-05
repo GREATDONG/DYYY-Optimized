@@ -5,7 +5,6 @@
 #  Channel: @huamidev
 #  Created on: 2024/10/04
 #
-# 本地配置文件（可选）
 -include Makefile.local
 
 TARGET = iphone:clang:latest:14.0
@@ -23,7 +22,6 @@ else
     unexport THEOS_PACKAGE_SCHEME
 endif
 
-# 在GitHub Actions中运行时的特殊配置
 ifeq ($(GITHUB_ACTIONS),true)
     export INSTALL = 0
     export FINALPACKAGE = 1
@@ -36,7 +34,7 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = DYYY
 
-DYYY_FILES = DYYY.xm DYYYIMEnhancement.xm DYYYFloatClearButton.xm DYYYFloatSpeedButton.m DYYYSettings.xm DYYYABTestHook.xm DYYYLongPressPanel.xm DYYYSettingsHelper.m DYYYImagePickerDelegate.m DYYYBackupPickerDelegate.m DYYYSettingViewController.m DYYYBottomAlertView.m DYYYCustomInputView.m DYYYOptionsSelectionView.m DYYYIconOptionsDialogView.m DYYYAboutDialogView.m DYYYKeywordListView.m DYYYFilterSettingsView.m DYYYConfirmCloseView.m DYYYToast.m DYYYManager.m DYYYUtils.m CityManager.m AWMSafeDispatchTimer.m
+DYYY_FILES = DYYY.xm DYYYFloatClearButton.xm DYYYFloatSpeedButton.m DYYYSettings.xm DYYYABTestHook.xm DYYYLongPressPanel.xm DYYYIMEnhancement.xm DYYYSettingsHelper.m DYYYImagePickerDelegate.m DYYYBackupPickerDelegate.m DYYYSettingViewController.m DYYYBottomAlertView.m DYYYCustomInputView.m DYYYOptionsSelectionView.m DYYYIconOptionsDialogView.m DYYYAboutDialogView.m DYYYKeywordListView.m DYYYFilterSettingsView.m DYYYConfirmCloseView.m DYYYToast.m DYYYManager.m DYYYUtils.m CityManager.m AWMSafeDispatchTimer.m
 DYYY_CFLAGS = -fobjc-arc -w
 DYYY_LDFLAGS = -weak_framework AVFAudio
 DYYY_FRAMEWORKS = CoreAudio
@@ -51,18 +49,16 @@ export LOGOS_DEFAULT_GENERATOR=internal
 include $(THEOS_MAKE_PATH)/tweak.mk
 
 ifeq ($(shell whoami),huami)
-    THEOS_DEVICE_IP = 192.168.31.222
+    THEOS_DEVICE_IP = 192.168.31.228
 else
-    THEOS_DEVICE_IP = 192.168.15.201
+    THEOS_DEVICE_IP = 192.168.15.105
 endif
 THEOS_DEVICE_PORT = 22
 
-# 清理 packages 目录
 clean::
 	@echo -e "\033[31m==>\033[0m Cleaning packages…"
 	@rm -rf .theos packages
 
-# 编译并自动安装
 after-package::
 	@echo -e "\033[32m==>\033[0m Packaging complete."
 	@if [ "$(GITHUB_ACTIONS)" != "true" ] && [ "$(INSTALL)" = "1" ]; then \

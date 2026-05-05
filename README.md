@@ -1,70 +1,113 @@
-# DYYY-Optimized
+### DYYY 
 
-抖音越狱插件优化版本，基于 [DYYY](https://github.com/huami1314/DYYY) 进行改进。
+用于调整抖音 UI 的 Tweak  
+仅在 **35.1.0 版本** 中测试。  
+已合并仓库 wtrwx/main 分支
 
-## 优化内容
+**仅供学习交流，禁止用于商业用途。**  
 
-### 1. 修复已知问题
-- **修复 IM 功能开关无效**：正确启用 `%group`，修复配置读取逻辑
-- **修复编译错误**：修复语法错误，确保 CI/CD 构建通过
-- **修复 nil 检查缺失**：在关键路径添加防御性 nil 检查
+#### **功能说明**  
+- 通过 **双指长按** 或 **抖音设置** 进入设置界面  
+- 功能自测
 
-### 2. 代码结构优化
-- **统一兼容层**：`DYYYCompat.h` 集中管理类名定义和安全查找
-- **改进日志系统**：添加分级日志（DEBUG/ERROR/WARNING）
-- **优化错误处理**：更完善的错误处理和用户提示
+#### 远程配置
 
-### 3. 功能改进
-- **IM 滑动手势**：左滑引用消息，右滑撤回消息
-- **阻止已读回执**：可选阻止消息已读状态上报
-- **阻止访客记录**：可选阻止访客记录上传
-- **视频下载优化**：更稳定的下载管理
+DYYY 可以通过远程 JSON 文件批量应用设置。默认下载地址在 `DYYYConstants.h` 中的 `DYYY_REMOTE_CONFIG_URL`。配置文件示例：
 
-## 构建
-
-### 本地构建
-```bash
-# 标准版本
-make package FINALPACKAGE=1
-
-# Rootless 版本
-make package SCHEME=rootless FINALPACKAGE=1
-
-# RootHide 版本
-make package SCHEME=roothide FINALPACKAGE=1
+```json
+{
+    "mode": "DYYY_MODE_PATCH",
+    "data": {
+        "ExampleKey": true
+    }
+}
 ```
 
-### CI/CD
-项目已配置 GitHub Actions，推送代码后自动构建三种版本。
+`mode` 字段可选，支持 `DYYY_MODE_PATCH` 和 `DYYY_MODE_REPLACE`，若省略则默认为补丁模式 (`DYYY_MODE_PATCH`)。
 
-## 安装
+#### 解析下载接口
 
-1. 下载 `.deb` 文件
-2. 通过 Filza 或 SSH 安装到设备
-3. 重启抖音应用
+##### 示例1：多清晰度视频（含音频和封面）
+```json
+{
+  "code": 200,
+  "msg": "success",
+  "data": {
+    "video_list": [
+      {"url": "https://video.com/hd.mp4", "level": "高清"},
+      {"url": "https://video.com/sd.mp4", "level": "标清"}
+    ],
+    "cover": "https://image.com/cover.jpg",
+    "music": "https://audio.com/bgm.mp3",
+    "images": [
+      "https://image.com/extra1.jpg",
+      "https://image.com/extra2.jpg"
+    ]
+  }
+}
+```
 
-## 配置
+##### 示例2：单个视频资源（含封面）
+```json
+{
+  "code": 200,
+  "msg": "success",
+  "data": {
+    "video_url": "https://video.com/main.mp4",
+    "cover": "https://image.com/thumbnail.jpg",
+    "music_url": "https://audio.com/soundtrack.mp3"
+  }
+}
+```
 
-在抖音设置中点击 "DYYY" 按钮进入设置界面。
+##### 示例3：纯图片资源
+```json
+{
+  "code": 200,
+  "msg": "success",
+  "data": {
+    "images": [
+      "https://image.com/photo1.jpg",
+      "https://image.com/photo2.jpg"
+    ],
+    "pics": "https://image.com/cover.png",
+    "img": [
+      "https://image.com/additional.jpg"
+    ]
+  }
+}
+```
 
-### IM 功能开关
-- `DYYYEnableSwipeActions`：启用滑动手势（默认开启）
-- `DYYYBlockReadReceipt`：阻止已读回执（默认关闭）
-- `DYYYBlockVisitorUpload`：阻止访客记录（默认关闭）
+##### 示例4：混合资源（视频+图片）
+```json
+{
+  "code": 200,
+  "msg": "success",
+  "data": {
+    "url": "https://video.com/short.mp4",
+    "videos": [
+      "https://video.com/extra.mp4"
+    ],
+    "cover": "https://image.com/poster.jpg",
+    "images": [
+      "https://image.com/screenshot1.png",
+      "https://image.com/screenshot2.png"
+    ]
+  }
+}
+```
 
-## 开发原则
-
-遵循 [COLLAB.md](COLLAB.md) 中的经验：
-
-1. **先验证，再动手**：每个改动都有证据支撑
-2. **最小改动**：只修必须修的，不动能跑的
-3. **见好就收**：功能通了就停，不追求完美
-
-## 致谢
-
-- 原作者：[huami](https://github.com/huami1314)
-- OpenClaw 和 TRAE CN 的协作经验
-
-## License
-
-MIT
+##### 字段说明
+| 字段名       | 类型       | 说明                               |
+| ------------ | ---------- | ---------------------------------- |
+| `video_list` | 对象数组   | 多清晰度选项，含`url`和`level`字段 |
+| `videos`     | 字符串数组 | 多个视频资源的URL集合              |
+| `video_url`  | 字符串     | 单个视频资源URL（优先使用字段）    |
+| `video`      | 字符串     | 单个视频资源URL（备用字段）        |
+| `url`        | 字符串     | 通用资源URL（视频优先）            |
+| `cover`      | 字符串     | 封面图URL（主字段）                |
+| `pics`       | 字符串     | 封面图URL（备用字段）              |
+| `music`      | 字符串     | 背景音乐URL（主字段）              |
+| `music_url`  | 字符串     | 背景音乐URL（备用字段）            |
+| `images`     | 字符串数组 | 附加图片资源集合                   |
+| `img`        | 字符串数组 | 附加图片资源集合（备用字段）       |

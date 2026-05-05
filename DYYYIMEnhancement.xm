@@ -441,17 +441,9 @@ static void DYYYSetupReadReceiptHooks() {
 // ============================================================
 
 %ctor {
-    // 关键修复：%init 必须无条件执行！
-    // 开关检查已在各 hook 方法内部处理
-    // 如果放在条件里，用户在设置中打开开关后 %ctor 不会重新执行，功能永远不生效
-    
-    // 初始化功能1: 滑动手势（开关在 didMoveToSuperview 和 handleSwipeGesture 内检查）
+    // 关键修复：%init 必须无条件执行！开关检查在各 hook 方法内部
     %init(DYYYIMSwipeActionsGroup);
-    
-    // 初始化功能2: 阻止已读回执（开关在替换函数内检查）
     DYYYSetupReadReceiptHooks();
     %init(DYYYBlockReadReceiptGroup);
-    
-    // 初始化功能3: 阻止访客记录（开关在 reportVisit/didEnterVisitorsPage/dataTaskWithRequest 内检查）
     %init(DYYYBlockVisitorUploadGroup);
 }
